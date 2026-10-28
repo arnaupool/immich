@@ -54,6 +54,8 @@
   import SlideshowBar from './SlideshowBar.svelte';
   import SlideshowMetadataOverlay from './SlideshowMetadataOverlay.svelte';
   import VideoViewer from './VideoWrapperViewer.svelte';
+  import { is360Asset } from './viewer-360/vendor/detect360';
+  import Viewer360 from './viewer-360/Viewer360.svelte';
 
   export type AssetCursor = {
     current: AssetResponseDto;
@@ -434,6 +436,9 @@
     if (previewStackedAsset) {
       return previewStackedAsset.type === AssetTypeEnum.Image ? 'PhotoViewer' : 'StackVideoViewer';
     }
+    if (!assetViewerManager.isShowEditor && is360Asset(asset)) {
+      return 'Viewer360';
+    }
     if (asset.type === AssetTypeEnum.Video) {
       return 'VideoViewer';
     }
@@ -579,6 +584,8 @@
         onVideoEnded={() => (assetViewerManager.isPlayingMotionPhoto = false)}
         playOriginalVideo={isPlayingOriginalVideo}
       />
+    {:else if viewerKind === 'Viewer360'}
+      <Viewer360 {asset} />
     {:else if viewerKind === 'ImagePanaramaViewer'}
       <ImagePanoramaViewer {asset} />
     {:else if viewerKind === 'CropArea'}
