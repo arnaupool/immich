@@ -14,7 +14,7 @@ case "${1:-start}" in
   start)
     docker compose -f .devcontainer/360-test/docker-compose.yml up -d
     cd web
-    IMMICH_SERVER_URL=http://localhost:2283/ nohup $pnpm exec vite dev --host 0.0.0.0 --port 3360 --strictPort > "$log" 2>&1 &
+    IMMICH_SERVER_URL=http://localhost:2283/ setsid nohup $pnpm exec vite dev --host 0.0.0.0 --port 3360 --strictPort > "$log" 2>&1 < /dev/null &
     echo "web: http://localhost:3360 (log in $log)"
     ;;
 esac
