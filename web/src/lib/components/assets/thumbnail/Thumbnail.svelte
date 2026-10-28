@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { timeline360 } from '$lib/components/asset-viewer/viewer-360/timeline360';
   import { ProjectionType } from '$lib/constants';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
@@ -82,6 +83,21 @@
   let height = $derived(thumbnailSize || thumbnailHeight || 235);
 
   let assetOwner = $derived(albumUsers?.find((user) => user.id === asset.ownerId) ?? null);
+
+  let is360 = $state(false);
+  $effect(() => {
+    const result = timeline360(asset);
+    if (typeof result === 'boolean') {
+      is360 = result;
+      return;
+    }
+    is360 = false;
+    let current = true;
+    void result.then((value) => current && (is360 = value));
+    return () => {
+      current = false;
+    };
+  });
 
   const onIconClickedHandler = (e?: MouseEvent) => {
     e?.stopPropagation();
@@ -338,11 +354,18 @@
           </div>
         {/if}
 
-        {#if asset.isImage && asset.projectionType === ProjectionType.EQUIRECTANGULAR}
+        {#if asset.isImage && (is360 || asset.projectionType === ProjectionType.EQUIRECTANGULAR)}
           <div class="absolute inset-e-0 top-0 z-2 flex place-items-center gap-1 text-xs font-medium text-white">
             <span class="pe-2 pt-2">
               <Icon icon={mdiRotate360} size="24" />
             </span>
+          </div>
+        {/if}
+
+        <!-- Videos keep the top corner for duration and play: the 360 mark goes below -->
+        {#if asset.isVideo && is360}
+          <div class={['absolute inset-e-2 z-2 text-white', assetOwner ? 'bottom-7' : 'bottom-2']}>
+            <Icon data-icon-360 icon={mdiRotate360} size="24" />
           </div>
         {/if}
 
