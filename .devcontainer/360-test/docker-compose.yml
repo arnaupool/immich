@@ -1,0 +1,41 @@
+# Throwaway Immich for testing the 360 viewer: stock server image, no machine learning.
+# The fork's web runs outside Docker (vite dev, port 3360) and proxies the API here.
+name: immich-360-test
+
+services:
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:v3.3.5
+    volumes:
+      - library:/data
+    environment:
+      DB_PASSWORD: postgres
+      DB_USERNAME: postgres
+      DB_DATABASE_NAME: immich
+      IMMICH_MACHINE_LEARNING_ENABLED: 'false'
+    ports:
+      - '2283:2283'
+    mem_limit: 4g
+    depends_on:
+      - redis
+      - database
+    restart: unless-stopped
+
+  redis:
+    image: docker.io/valkey/valkey:9@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d
+    restart: unless-stopped
+
+  database:
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: immich
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    shm_size: 128mb
+    restart: unless-stopped
+
+volumes:
+  library:
+  postgres:
