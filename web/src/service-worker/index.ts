@@ -23,6 +23,12 @@ const handleFetch = (event: FetchEvent): void => {
     return;
   }
 
+  // Range requests (the 360 viewer streams originals in chunks) differ only in a header,
+  // so the URL-keyed dedup below would answer every chunk with the first one.
+  if (event.request.headers.has('range')) {
+    return;
+  }
+
   // Cache requests for thumbnails
   const url = new URL(event.request.url);
   if (url.origin === globalThis.location.origin && ASSET_REQUEST_REGEX.test(url.pathname)) {
