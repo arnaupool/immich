@@ -37,6 +37,7 @@
           fileName: current.originalFileName,
           kind: current.type === AssetTypeEnum.Video ? 'video' : 'image',
           assetKey: id,
+          cameraModel: [current.exifInfo?.make, current.exifInfo?.model].filter(Boolean).join(' '),
           fetchInit: { credentials: 'same-origin' },
         });
       })
