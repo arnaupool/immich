@@ -1,0 +1,68 @@
+# Daily: when Immich publishes a release that ImageGenius has already packaged, ports
+# the 360 viewer to it (branch 360/vX.Y.Z from the release tag, our changes on top as
+# one commit) and starts 360-image.yml. On a conflict the run fails, which GitHub
+# reports by email; the image is not updated until the port is done by hand.
+name: 360 rebase
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Find the version to port
+        id: target
+        run: |
+          version=$(gh api repos/immich-app/immich/releases/latest --jq .tag_name)
+          current=$(git ls-remote --heads "https://github.com/$GITHUB_REPOSITORY.git" '360/v*' \
+            | sed 's|.*refs/heads/360/||' | sort -V | tail -1)
+          echo "Latest Immich: $version; newest 360 branch: $current" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$current" ] || [ "$(printf '%s\n%s\n' "$current" "$version" | sort -V | tail -1)" = "$current" ]; then
+            echo "Nothing to port." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! docker buildx imagetools inspect "ghcr.io/imagegenius/immich:${version#v}" > /dev/null 2>&1; then
+            echo "ImageGenius has no ${version#v} image yet; trying again tomorrow." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          { echo "version=$version"; echo "current=$current"; } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.target.outputs.version
+        with:
+          ref: 360/${{ steps.target.outputs.current }}
+          fetch-depth: 0
+
+      - name: Port the 360 changes
+        if: steps.target.outputs.version
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+          CURRENT: ${{ steps.target.outputs.current }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch --no-tags https://github.com/immich-app/immich.git \
+            "refs/tags/$CURRENT:refs/tags/$CURRENT" "refs/tags/$VERSION:refs/tags/$VERSION"
+          git switch -c "360/$VERSION" "$VERSION"
+          if ! git cherry-pick "$CURRENT..origin/360/$CURRENT"; then
+            git cherry-pick --abort
+            echo "Conflict porting 360/$CURRENT onto $VERSION: port it by hand." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Conflict porting 360/$CURRENT onto $VERSION: port it by hand."
+            exit 1
+          fi
+          # One commit: the token may not push history that ever touched workflow files.
+          git reset --soft "$VERSION"
+          git commit -m "feat: 360 viewer, ported from 360/$CURRENT ($(git rev-parse --short "origin/360/$CURRENT"))"
+          git push origin "360/$VERSION"
+          gh workflow run 360-image.yml --ref "$GITHUB_REF_NAME" -f "branch=360/$VERSION"
+          echo "Ported to 360/$VERSION and started the image build." >> "$GITHUB_STEP_SUMMARY"

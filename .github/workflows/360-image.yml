@@ -1,0 +1,74 @@
+# Builds ghcr.io/<owner>/immich:vX.Y.Z-360: ImageGenius' image for Immich X.Y.Z with
+# the web of branch 360/vX.Y.Z (360 viewer). See docker/360/Dockerfile in that branch.
+# Lives on the default branch so 360-rebase.yml can start it (the Actions token may not
+# push workflow files, so the 360 branches carry none).
+name: 360 image
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '360 branch to build, e.g. 360/v3.3.5'
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: 360-image-${{ inputs.branch }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: startsWith(inputs.branch, '360/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          persist-credentials: false
+
+      - name: Versions and base image digest
+        id: meta
+        env:
+          BRANCH: ${{ inputs.branch }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          version="${BRANCH#360/}"                  # v3.3.5
+          base="ghcr.io/imagegenius/immich:${version#v}"
+          digest=$(docker buildx imagetools inspect "$base" --format '{{json .Manifest}}' | jq -r .digest)
+          sha=$(git rev-parse --short=7 HEAD)
+          image="ghcr.io/${OWNER,,}/immich"
+          {
+            echo "base=$base@$digest"
+            echo "sha=$(git rev-parse HEAD)"
+            echo "tags=$image:$version-360,$image:$version-360-$sha"
+          } >> "$GITHUB_OUTPUT"
+          echo "Branch $BRANCH at $sha, base $base@$digest" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/360/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            BASE_IMAGE=${{ steps.meta.outputs.base }}
+            BUILD_ID=${{ github.run_id }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.meta.outputs.sha }}
+            org.opencontainers.image.base.name=${{ steps.meta.outputs.base }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
